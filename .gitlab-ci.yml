@@ -3,6 +3,7 @@ stages:
   - build
 
 before_script:
+  - go get -u "golang.org/x/net/html"
   - cd /builds/bestmethod/webCrawler
   - mkdir -p bin/linux
   - mkdir bin/osx
