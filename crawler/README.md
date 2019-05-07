@@ -36,7 +36,7 @@ func main() {
 
 * [func NewCrawler() (crawler *Crawler)](#func-newcrawler)
 * [type Crawler](#type-crawler)
-  * [func (c *Crawler) Crawl(baseUrl string, callbackFunc func(*FoundUrls))](#func-c-crawler-crawlbaseurl-string-callbackfunc-funcfoundurls)
+  * [func (c *Crawler) Crawl(baseUrl string, callbackFunc func(*FoundUrls))](#func-c-crawler-crawl)
 * [type CrawlerAuth](#type-crawlerauth)
 * [type FoundUrls](#type-foundurls)
 
