@@ -6,6 +6,8 @@
 
 ### Binary / executable
 
+To grab a precompiled binary, head to [`gitlab->pipeline`](https://gitlab.com/bestmethod/webCrawler/pipelines) and download artifacts for the latest pipeline->job
+
 #### Usage:
 
 ```
