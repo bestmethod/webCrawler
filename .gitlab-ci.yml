@@ -1,0 +1,21 @@
+image: golang:latest
+stages:
+  - build
+
+before_script:
+  - cd /builds/bestmethod/webCrawler
+  - mkdir -p bin/linux
+  - mkdir bin/osx
+  - mkdir bin/windows
+
+build:
+  stage: build
+  script:
+    - env GOOS=linux GOARCH=amd64 go build -o bin/linux/crawler
+    - env GOODS=osx GOARCH=amd64 go build -o bin/osx/crawler
+    - env GOOS=windows GOARCH=amd64 go build -o bin/windows/crawler
+  artifacts:
+    paths:
+      - bin/linux
+      - bin/osx
+      - bin/windows
