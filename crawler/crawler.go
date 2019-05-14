@@ -26,7 +26,7 @@ type CrawlerAuth struct {
 // struct returned to callback func for each url crawled with urls found
 type FoundUrls struct {
 	CrawlUrl  string
-	FoundUrls []string
+	FoundUrls []*string
 	Err       error
 	Depth     int
 }

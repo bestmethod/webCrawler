@@ -30,6 +30,10 @@ type crawlWorkerInterface interface {
 	doHttpRequest(crawlUrl string) (r *http.Response, err error)
 	addWorker()
 	waitForWorkers()
+    crawlWorkCheckList(crawlUrl string) (doWork bool)
+	crawlWorkGetRetry(crawlUrl string) (resp *http.Response, err error)
+	crawlWorkHashLoopCheck(crawlUrl string, resp *http.Response) (respBody io.Reader, err error)
+	crawlWorkParseUrls(crawlUrl string, link string) (foundUrl string, err error)
 }
 
 func (w *crawlWorker) addWorker() {
@@ -64,9 +68,9 @@ func (w *crawlWorker) crawl(crawlUrl string, depth int) {
 		w.callbackFunc(u)
 		if w.crawler.MaxDepth < 0 || depth < w.crawler.MaxDepth {
 			for _, aurl := range u.FoundUrls {
-				if w.crawler.FollowExternal == true || strings.HasPrefix(aurl, w.baseUrl) {
+				if w.crawler.FollowExternal == true || strings.HasPrefix(*aurl, w.baseUrl) {
 					w.addWorker()
-					go w.crawl(aurl, depth+1)
+					go w.crawl(*aurl, depth+1)
 				}
 			}
 		}
@@ -88,34 +92,18 @@ func (w *crawlWorker) crawlWork(crawlUrl string, depth int) (u *FoundUrls) {
 	defer func() { <-w.workers }()
 
 	// find if we crawled this before, if so exit, if not add to list of 'crawled this'
-	w.mutex.Lock()
-	for _, nurl := range w.crawledUrls {
-		if *nurl == crawlUrl {
-			w.mutex.Unlock()
-			return nil
-		}
+	if w.crawlWorkCheckList(crawlUrl) == false {
+		return nil
 	}
-	w.crawledUrls = append(w.crawledUrls, &crawlUrl)
-	w.mutex.Unlock()
 
 	// handle HTTP request
 	// handles retries and sleep between retries
-	var resp *http.Response
-	var err error
-	for retries := 0; retries <= w.crawler.Retries; retries += 1 {
-		resp, err = w.doHttpRequest(crawlUrl)
-		if err != nil {
-			if retries == w.crawler.Retries {
-				u.Err = makeError("doHttpRequest: %s", err)
-				return
-			} else if w.crawler.SleepBetweenRetries > 0 {
-				time.Sleep(w.crawler.SleepBetweenRetries)
-			}
-		} else {
-			break
-		}
+	resp, err := w.crawlWorkGetRetry(crawlUrl)
+	if err != nil {
+		u.Err = err
+		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// if content-type header exists, and it's NOT text/html, simply return nil, not a HTML file
 	if len(resp.Header["Content-Type"]) > 0 {
@@ -126,56 +114,98 @@ func (w *crawlWorker) crawlWork(crawlUrl string, depth int) (u *FoundUrls) {
 
 	// if HashLoopCheck is true, handle checking if hash was already crawled, set error and return if yes
 	// otherwise, add to hash list
-	var respBody io.Reader
-	if w.crawler.HashLoopCheck == true {
-		hasher := sha256.New()
-		respBody = io.TeeReader(resp.Body, hasher)
-		sum := hasher.Sum(nil)
-		w.hashMutex.Lock()
-		for hashUrl, hash := range w.crawledUrlHash {
-			if bytes.Compare(*hash, sum) == 0 {
-				w.hashMutex.Unlock()
-				u.Err = makeError("HashLoopCheck: %s", hashUrl)
-				return
-			}
-		}
-		w.crawledUrlHash[crawlUrl] = &sum
-		w.hashMutex.Unlock()
-	} else {
-		respBody = resp.Body
+	respBody, err := w.crawlWorkHashLoopCheck(crawlUrl, resp)
+	if err != nil {
+		u.Err = err
+		return
 	}
 
 	// extract '<a href=' links, parrse them and add to list of FoundUrls
 	// here if we have an issue parsing the URL, we will set an error, but will not return without finishing parsing
 	links := extractHref(respBody)
 	for _, link := range links {
-		if strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") {
-			u.FoundUrls = append(u.FoundUrls, link)
-		} else {
-			linkUrl, err := url.Parse(crawlUrl)
-			if err != nil {
-				if u.Err == nil {
-					u.Err = makeError("url.Parse: %s", err)
-				} else {
-					u.Err = makeError("%s && url.Parse: %s", u.Err, err)
-				}
-				continue
+		foundUrl, err := w.crawlWorkParseUrls(crawlUrl, link)
+		if err != nil {
+			if u.Err == nil {
+				u.Err = err
+			} else {
+				u.Err = makeError("%s && %s", u.Err, err)
 			}
-			rel, err := linkUrl.Parse(link)
-			if err != nil {
-				if u.Err == nil {
-					u.Err = makeError("url.Parse.Parse(%s): %s", link, err)
-				} else {
-					u.Err = makeError("%s && url.Parse.Parse(%s): %s", u.Err, link, err)
-				}
-				continue
-			}
-			u.FoundUrls = append(u.FoundUrls, rel.String())
+			continue
 		}
+		u.FoundUrls = append(u.FoundUrls, &foundUrl)
 	}
 
 	// success!!!
 	return
+}
+
+func (w *crawlWorker) crawlWorkParseUrls(crawlUrl string, link string) (foundUrl string, err error) {
+	if strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") {
+		foundUrl = link
+	} else {
+		linkUrl, errP := url.Parse(crawlUrl)
+		if errP != nil {
+			err = makeError("url.Parse: %s", errP)
+			return
+		}
+		rel, errP := linkUrl.Parse(link)
+		if errP != nil {
+			err = makeError("url.Parse.Parse(%s): %s", link, errP)
+			return
+		}
+		foundUrl = rel.String()
+	}
+	return
+}
+
+func (w *crawlWorker) crawlWorkHashLoopCheck(crawlUrl string, resp *http.Response) (respBody io.Reader, err error) {
+	if w.crawler.HashLoopCheck == true {
+		hasher := sha256.New()
+		respBody = io.TeeReader(resp.Body, hasher)
+		sum := hasher.Sum(nil)
+		w.hashMutex.Lock()
+		defer w.hashMutex.Unlock()
+		for hashUrl, hash := range w.crawledUrlHash {
+			if bytes.Compare(*hash, sum) == 0 {
+				err = makeError("HashLoopCheck: %s", hashUrl)
+				return
+			}
+		}
+		w.crawledUrlHash[crawlUrl] = &sum
+	} else {
+		respBody = resp.Body
+	}
+	return
+}
+
+func (w *crawlWorker) crawlWorkGetRetry(crawlUrl string) (resp *http.Response, err error) {
+	for retries := 0; retries <= w.crawler.Retries; retries += 1 {
+		resp, err = w.doHttpRequest(crawlUrl)
+		if err != nil {
+			if retries == w.crawler.Retries {
+				err = makeError("doHttpRequest: %s", err)
+				return
+			} else if w.crawler.SleepBetweenRetries > 0 {
+				time.Sleep(w.crawler.SleepBetweenRetries)
+			}
+		} else {
+			break
+		}
+	}
+	return
+}
+
+func (w *crawlWorker) crawlWorkCheckList(crawlUrl string) (doWork bool) {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	for _, nurl := range w.crawledUrls {
+		if *nurl == crawlUrl {
+			return false
+		}
+	}
+	w.crawledUrls = append(w.crawledUrls, &crawlUrl)
+	return true
 }
 
 // handle actual HTTP call, return response or error, calling function can deal with the retries, if any

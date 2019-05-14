@@ -14,7 +14,8 @@ func TestCallback(t *testing.T) {
 	cb := new(Callback)
 	cb.indent = false
 	cb.errStderr = false
-	u := crawler.FoundUrls{CrawlUrl:"testA",FoundUrls:[]string{"testB"},Err:errors.New("testC")}
+	aurl := "testB"
+	u := crawler.FoundUrls{CrawlUrl:"testA",FoundUrls:[]*string{&aurl},Err:errors.New("testC")}
 	stdout := os.Stdout
 	stderr := os.Stderr
 	rOut, wOut, err := os.Pipe()
@@ -62,7 +63,8 @@ func TestCallbackIndent(t *testing.T) {
 	cb := new(Callback)
 	cb.indent = true
 	cb.errStderr = false
-	u := crawler.FoundUrls{CrawlUrl:"testA",FoundUrls:[]string{"testB"},Err:errors.New("testC")}
+	aurl := "testB"
+	u := crawler.FoundUrls{CrawlUrl:"testA",FoundUrls:[]*string{&aurl},Err:errors.New("testC")}
 	stdout := os.Stdout
 	stderr := os.Stderr
 	rOut, wOut, err := os.Pipe()
@@ -117,7 +119,8 @@ func TestCallbackIndentStderr(t *testing.T) {
 	cb := new(Callback)
 	cb.indent = true
 	cb.errStderr = true
-	u := crawler.FoundUrls{CrawlUrl:"testA",FoundUrls:[]string{"testB"},Err:errors.New("testC")}
+	aurl := "testB"
+	u := crawler.FoundUrls{CrawlUrl:"testA",FoundUrls:[]*string{&aurl},Err:errors.New("testC")}
 	stdout := os.Stdout
 	stderr := os.Stderr
 	rOut, wOut, err := os.Pipe()

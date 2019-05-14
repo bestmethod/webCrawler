@@ -15,7 +15,7 @@ import (
 // will be copying output in callback to this before parsing to json - json.Marshall doesn't handle error type
 type JsonOutput struct {
 	CrawledUrl string
-	FoundUrls  []string
+	FoundUrls  []*string
 	Depth      int
 	Error      string
 }

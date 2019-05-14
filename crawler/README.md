@@ -150,7 +150,7 @@ type FoundUrls struct {
 	
 	// list of links found while crawling the CrawlUrl, translated to absolute URLs
 	// may be empty if no links found or error occurred
-	FoundUrls []string
+	FoundUrls []*string
 	
 	// a list of any errors occurred while crawling and parsing the CrawlUrl
 	// String error will be of format "error 1 text && error 2 text && ..."
